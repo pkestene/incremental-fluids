@@ -205,6 +205,11 @@ public:
     }
 };
 
+enum ITER_TYPE {
+  ITER_GAUSS_SEIDEL,
+  ITER_JACOBI
+};
+
 class FluidSolver {
     FluidQuantity *_d;
     FluidQuantity *_u;
@@ -218,8 +223,12 @@ class FluidSolver {
     
     double *_r;
     double *_p;
-    
-    void buildRhs() {
+    double *_p2;
+  
+    //int iteration_type = ITER_GAUSS_SEIDEL;
+  int iteration_type; // = ITER_JACOBI;
+
+  void buildRhs() {
         double scale = 1.0/_hx;
         
         for (int y = 0, idx = 0; y < _h; y++) {
@@ -276,6 +285,54 @@ class FluidSolver {
         printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
     }
     
+    void project_jacobi(int limit, double timestep) {
+        double scale = timestep/(_density*_hx*_hx);
+        
+        double maxDelta;
+        for (int iter = 0; iter < limit; iter++) {
+            maxDelta = 0.0;
+            for (int y = 0, idx = 0; y < _h; y++) {
+                for (int x = 0; x < _w; x++, idx++) {
+                    int idx = x + y*_w;
+                    
+                    double diag = 0.0, offDiag = 0.0;
+                    
+                    if (x > 0) {
+                        diag    += scale;
+                        offDiag -= scale*_p[idx - 1];
+                    }
+                    if (y > 0) {
+                        diag    += scale;
+                        offDiag -= scale*_p[idx - _w];
+                    }
+                    if (x < _w - 1) {
+                        diag    += scale;
+                        offDiag -= scale*_p[idx + 1];
+                    }
+                    if (y < _h - 1) {
+                        diag    += scale;
+                        offDiag -= scale*_p[idx + _w];
+                    }
+
+                    double newP = (_r[idx] - offDiag)/diag;
+                    
+                    maxDelta = max(maxDelta, fabs(_p[idx] - newP));
+                    
+                    _p2[idx] = newP;
+                }
+            }
+
+	    memcpy(_p,_p2,_w*_h*sizeof(double));
+	    
+            if (maxDelta < 1e-5) {
+                printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
+                return;
+            }
+        }
+        
+        printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
+    }
+    
     void applyPressure(double timestep) {
         double scale = timestep/(_density*_hx);
         
@@ -297,15 +354,22 @@ class FluidSolver {
 public:
     FluidSolver(int w, int h, double density) : _w(w), _h(h), _density(density) {
         _hx = 1.0/min(w, h);
-        
+
+	iteration_type = ITER_JACOBI;
+	
         _d = new FluidQuantity(_w,     _h,     0.5, 0.5, _hx);
         _u = new FluidQuantity(_w + 1, _h,     0.0, 0.5, _hx);
         _v = new FluidQuantity(_w,     _h + 1, 0.5, 0.0, _hx);
         
         _r = new double[_w*_h];
         _p = new double[_w*_h];
-        
-        memset(_p, 0, _w*_h*sizeof(double));
+	memset(_p, 0, _w*_h*sizeof(double));
+
+	if (iteration_type == ITER_JACOBI) {
+	  _p2 = new double[_w*_h];
+ 	  memset(_p2, 0, _w*_h*sizeof(double));
+	}
+
     }
     
     ~FluidSolver() {
@@ -315,11 +379,18 @@ public:
         
         delete[] _r;
         delete[] _p;
+	if (iteration_type == ITER_JACOBI) {
+	  delete[] _p2;
+	}
     }
     
     void update(double timestep) {
         buildRhs();
-        project(600, timestep);
+	if (iteration_type == ITER_JACOBI) {
+	  project_jacobi(600, timestep);
+	} else {
+	  project(600, timestep);
+	}
         applyPressure(timestep);
         
         _d->advect(timestep, *_u, *_v);
