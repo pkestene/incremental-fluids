@@ -288,8 +288,6 @@ class FluidSolver {
 
         for (int y = _h - 1, idx = _w*_h - 1; y >= 0; y--) {
             for (int x = _w - 1; x >= 0; x--, idx--) {
-                idx = x + y*_w;
-                
                 
                 double t = dst[idx];
 
