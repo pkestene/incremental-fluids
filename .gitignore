@@ -5,3 +5,5 @@
 # Generated images/videos
 *.png
 *.mp4
+
+build*
