@@ -533,13 +533,13 @@ public:
 	double nx = _normalX[idx];
 	double ny = _normalY[idx];
 	
-	_mask_map[idx] = READY;
-	nbReady++;
 	if ( (nx != 0.0 && _cell[idx + sgn(nx)]    != CELL_FLUID) ||
 	     (ny != 0.0 && _cell[idx + sgn(ny)*_w] != CELL_FLUID) ) {
 	  _mask_map[idx] = TODO;
 	  nbTodo++;
-	  nbReady--;
+	} else {
+	  _mask_map[idx] = READY;
+	  nbReady++;
 	}
       }
     }
